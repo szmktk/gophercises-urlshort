@@ -9,8 +9,8 @@ import (
 )
 
 type ShortenedUrl struct {
-	Path string `yaml:"path"`
-	Url  string `yaml:"url"`
+	Path string `json:"path" yaml:"path"`
+	Url  string `json:"url" yaml:"url"`
 }
 
 type ShortenedUrls []ShortenedUrl
