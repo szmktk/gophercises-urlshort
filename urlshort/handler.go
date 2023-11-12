@@ -15,23 +15,33 @@ type ShortenedUrl struct {
 
 type ShortenedUrls []ShortenedUrl
 
+type pathRedirector struct {
+	pathsToUrls map[string]string
+	fallback    http.Handler
+}
+
+func (pr *pathRedirector) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	slog.Info("Request url: " + r.URL.String())
+	path := r.URL.Path
+	if url, exists := pr.pathsToUrls[path]; exists {
+		slog.Info("Redirecting to " + url)
+		http.Redirect(w, r, url, http.StatusMovedPermanently)
+		return
+	}
+	slog.Warn("No url in map")
+	pr.fallback.ServeHTTP(w, r)
+}
+
 // MapHandler will return an http.HandlerFunc (which also
 // implements http.Handler) that will attempt to map any
 // paths (keys in the map) to their corresponding URL (values
 // that each key in the map points to, in string format).
 // If the path is not provided in the map, then the fallback
 // http.Handler will be called instead.
-func MapHandler(pathsToUrls map[string]string, fallback http.Handler) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		slog.Info("Request url: " + r.URL.String())
-		path := r.URL.Path
-		if url, exists := pathsToUrls[path]; exists {
-			slog.Info("Redirecting to " + url)
-			http.Redirect(w, r, url, http.StatusMovedPermanently)
-			return
-		}
-		slog.Warn("No url in map")
-		fallback.ServeHTTP(w, r)
+func MapHandler(pathsToUrls map[string]string, fallback http.Handler) http.Handler {
+	return &pathRedirector{
+		pathsToUrls: pathsToUrls,
+		fallback: fallback,
 	}
 }
 
@@ -51,7 +61,7 @@ func MapHandler(pathsToUrls map[string]string, fallback http.Handler) http.Handl
 //
 // See MapHandler to create a similar http.HandlerFunc via
 // a mapping of paths to urls.
-func YAMLHandler(yamlInput []byte, fallback http.Handler) (http.HandlerFunc, error) {
+func YAMLHandler(yamlInput []byte, fallback http.Handler) (http.Handler, error) {
 	parsedYaml, err := parseYAML(yamlInput)
 	if err != nil {
 		return nil, err
@@ -60,7 +70,7 @@ func YAMLHandler(yamlInput []byte, fallback http.Handler) (http.HandlerFunc, err
 	return MapHandler(pathMap, fallback), nil
 }
 
-func JSONHandler(jsonInput []byte, fallback http.Handler) (http.HandlerFunc, error) {
+func JSONHandler(jsonInput []byte, fallback http.Handler) (http.Handler, error) {
 	parsedJson, err := parseJSON(jsonInput)
 	if err != nil {
 		return nil, err
